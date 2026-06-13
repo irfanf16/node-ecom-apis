@@ -1,71 +1,146 @@
-# Node E-Commerce APIs
+# Node.js eCommerce REST API
 
-A lightweight **Node.js + Express REST API** for an e-commerce backend — user registration, JWT authentication via HTTP-only cookies, and full user CRUD. Backs the `react-ecom-web` frontend.
+> **Node.js + Express + MongoDB** REST API backend for the eCommerce platform. Implements clean service-layer architecture, JWT cookie authentication with `x-auth-token` header fallback, bcrypt password hashing, and role-based user accounts.
 
-![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat&logo=nodedotjs)
-![Express](https://img.shields.io/badge/Express-4.21-000000?style=flat&logo=express)
-![MongoDB](https://img.shields.io/badge/MongoDB_Atlas-47A248?style=flat&logo=mongodb)
-![Mongoose](https://img.shields.io/badge/Mongoose-8.7-880000?style=flat)
-![JWT](https://img.shields.io/badge/jsonwebtoken-9.0-000000?style=flat&logo=jsonwebtokens)
-![bcryptjs](https://img.shields.io/badge/bcryptjs-2.4-4A90D9?style=flat)
+![Node.js](https://img.shields.io/badge/Node.js-Express-339933?style=flat-square&logo=node.js&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose_8-47A248?style=flat-square&logo=mongodb&logoColor=white)
+![JWT](https://img.shields.io/badge/JWT-9.0-000000?style=flat-square&logo=jsonwebtokens&logoColor=white)
 
-## API Endpoints
+---
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| POST | `/api/register` | No | Register user (bcrypt hash, `role: 'user'` enforced) |
-| POST | `/api/login` | No | Login, JWT set in HTTP-only cookie |
-| GET | `/api/logout` | No | Clear auth cookie |
-| GET | `/api/user` | Yes | Get authenticated user |
-| PUT | `/api/user` | Yes | Update user by `_id` |
-| DELETE | `/api/user` | Yes | Delete user by `id` |
-| GET | `/api/users` | No | List all users (admin use) |
+## Tech Stack
 
-Auth middleware (`authToken`) reads JWT from cookie or `x-auth-token` header.
-
-## Database Schema (MongoDB — `users` collection)
-
-| Field | Type | Constraints |
+| Package | Version | Purpose |
 |---|---|---|
-| `name` | String | Required |
-| `email` | String | Required, unique, regex validated |
-| `password` | String | Required (bcrypt hash) |
-| `profile_pic` | String | Default: `''` |
-| `phone` | String | Default: `''` |
-| `role` | String | `enum: ['user', 'admin']`, default: `'user'` |
+| `express` | ^4.21.0 | HTTP framework |
+| `mongoose` | ^8.7.0 | MongoDB ODM |
+| `jsonwebtoken` | ^9.0.2 | JWT generation + verification |
+| `bcryptjs` | ^2.4.3 | Password hashing |
+| `cookie-parser` | ^1.4.6 | Reads JWT from HTTP-only cookies |
+| `cors` | ^2.8.5 | Cross-origin resource sharing |
+| `dotenv` | ^16.4.5 | Environment variable loading |
+| `nodemon` | ^3.1.7 | Dev auto-restart |
+
+**Port:** `process.env.PORT || 5000`
+
+---
 
 ## Architecture
 
+**Service-layer pattern** — controllers delegate DB operations to `userService`, keeping database logic separate from request handling.
+
 ```
-index.js → Express: CORS, cookie-parser, routes, DB connect
-routes/index.js → All route definitions
-controllers/ → register, login, logout, userController
-middlewares/authToken.js → JWT verification
-models/userModel.js → Mongoose schema
-services/userService.js → DB query helpers
-config/database.js → mongoose.connect()
+Request
+  |
+  v
+Route
+  |
+  v
+Middleware (authToken — JWT validation)
+  |
+  v
+Controller
+  |  delegates DB queries
+  v
+Service (userService.js)
+  |
+  v
+Mongoose Model
+  |
+  v
+MongoDB Atlas
 ```
 
-> **Security Note:** `.env` with MongoDB Atlas URI was committed to the repo — rotate these credentials.
+---
+
+## API Routes
+
+All under `/api/` prefix:
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/register` | None | Register new user (bcrypt hash password) |
+| `POST` | `/api/login` | None | Login — sets JWT as HTTP-only cookie |
+| `GET` | `/api/logout` | None | Clear auth cookie |
+| `GET` | `/api/user` | JWT | Get authenticated user profile |
+| `PUT` | `/api/user` | JWT | Update user profile |
+| `DELETE` | `/api/user` | JWT | Delete user account |
+| `GET` | `/api/users` | None | List all users (admin utility) |
+
+---
+
+## Database Schema
+
+**`users` collection** (Mongoose, `timestamps: true`):
+
+| Field | Type | Constraints |
+|---|---|---|
+| `name` | String | required |
+| `email` | String | required, unique, regex validated |
+| `password` | String | required, bcrypt hashed |
+| `profile_pic` | String | default: `''` |
+| `phone` | String | default: `''` |
+| `role` | String (enum) | `['user', 'admin']`, default: `'user'` |
+| `createdAt` / `updatedAt` | Date | auto (timestamps) |
+
+---
+
+## Authentication
+
+**`authToken` middleware** (`middlewares/authToken.js`):
+1. Reads JWT from `req.cookies.token` (HTTP-only cookie set at login)
+2. Falls back to `req.header('x-auth-token')` (mobile/Postman clients)
+3. Verifies with `process.env.TOKEN_SECRET_KEY`
+4. Attaches `req.user = decoded` payload on success
+5. Returns `401` on invalid/missing token
+
+**CORS:** Configured for `FRONTEND_URL` with `credentials: true` — allows the React frontend to send cookies cross-origin.
+
+---
+
+## Project Structure
+
+```
+index.js              — App bootstrap, DB connect, CORS, routes
+config/
+  database.js         — Mongoose connection (process.exit on failure)
+routes/
+  index.js            — All route definitions
+controllers/
+  registerController.js
+  loginController.js
+  logoutController.js
+  userController.js   — getUser, updateUser, deleteUser, usersList
+middlewares/
+  authToken.js        — JWT verification middleware
+models/
+  userModel.js        — User schema + model
+services/
+  userService.js      — DB query abstraction (findByEmail, createUser, etc.)
+```
+
+---
 
 ## Getting Started
 
 ```bash
 npm install
 cp .env.example .env
-# Edit .env: MONGODB_URI, TOKEN_SECRET_KEY, FRONTEND_URL
-npm run dev   # nodemon, port 5000
+# Required: MONGO_URI, TOKEN_SECRET_KEY, FRONTEND_URL, PORT
+npm run dev        # nodemon
+npm start          # node index.js
 ```
 
-## Environment Variables
-
+**Environment variables:**
 ```env
-MONGODB_URI=mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/<db>
 PORT=5000
+MONGO_URI=mongodb+srv://...
 TOKEN_SECRET_KEY=your_jwt_secret
 FRONTEND_URL=http://localhost:3000
-NODE_ENV=development
 ```
 
-## License
-MIT
+## Related Repositories
+
+| Repo | Purpose |
+|---|---|
+| `react-ecom-web` | React 18 + Redux Toolkit frontend (consumes this API) |
